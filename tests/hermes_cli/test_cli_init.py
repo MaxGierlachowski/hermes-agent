@@ -747,6 +747,27 @@ class TestRootLevelProviderOverride:
         assert result["model"]["provider"] == "openai"
         assert "model" not in result["model"]
 
+    def test_nested_dict_default_extra_keys_survive_a_whole_file_save(self, tmp_path):
+        """#153296: keys nested next to model/provider move up beside ``default``, so a
+        whole-file save keeps them; an outer key the nested one clashes with is kept."""
+        import os
+        from unittest.mock import patch
+
+        import hermes_yaml as yaml
+        from hermes_cli.config import load_config, save_config
+
+        (tmp_path / "config.yaml").write_text(yaml.safe_dump({"model": {
+            "default": {"model": "x/y", "provider": "openrouter", "newer_field": "keepme",
+                        "base_url": "https://nested.example/v1"},
+            "base_url": "https://outer.example/v1",
+        }}), encoding="utf-8")
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            save_config(load_config())
+        model = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))["model"]
+        assert model["default"] == "x/y" and model["provider"] == "openrouter"
+        assert model["newer_field"] == "keepme"
+        assert model["base_url"] == "https://outer.example/v1"
+
     def test_flat_string_default_untouched(self):
         """Plain string defaults keep existing behavior exactly."""
         from hermes_cli.config import _normalize_root_model_keys
